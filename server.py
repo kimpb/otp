@@ -1,13 +1,16 @@
 import socketserver
 import threading
 import pyotp
-import datetime
+from datetime import date, datetime, timezone, timedelta
+import pytz
 
-HOST = 'ec2-3-37-62-251.ap-northeast-2.compute.amazonaws.com'
+HOST = 'ec2-13-209-98-41.ap-northeast-2.compute.amazonaws.com'
 PORT = 4000
 lock = threading.Lock() # syncronized 동기화 진행하는 스레드 생성
 otp_key = 'GAYDAMBQGAYDAMBQGAYDAMBQGA======'
 totp = pyotp.TOTP(otp_key)
+KST = pytz.timezone('Asia/Seoul')
+time_record = datetime.now(KST)
 
 class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는 클래스
 				   # ① 채팅 서버로 입장한 사용자의 등록
@@ -20,18 +23,14 @@ class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는
 
    def addUser(self, username, conn, addr): # 사용자 ID를 self.users에 추가하는 함수
       if username in self.users: # 이미 등록된 사용자라면
-         conn.send('Already exist user.\n'.encode())
+         conn.send('%s' %totp.now().encode())
          return None
 
       # 새로운 사용자를 등록함
       lock.acquire() # 스레드 동기화를 막기위한 락
       self.users[username] = (conn, addr)
       lock.release() # 업데이트 후 락 해제
-      now = datetime.datetime.now()
-      nowTime = now.strftime('%H:%M:%S')
-      print(nowTime)      # 12:11:32
       self.sendMessageToAll('%s' %totp.now())
-      print('+++ Connected Client Number [%d]' %len(self.users))
       return username
 
    def removeUser(self, username): #사용자를 제거하는 함수
@@ -42,12 +41,11 @@ class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는
       del self.users[username]
       lock.release()
 
-      self.sendMessageToAll('[%s] has quit.' %username)
-      print('--- Connected Client Number [%d]' %len(self.users))
+      self.sendMessageToAll('%s' %totp.now())
 
    def messageHandler(self, username, msg): # 전송한 msg를 처리하는 부분
       if msg[0] != '/': # 보낸 메세지의 첫문자가 '/'가 아니면
-         self.sendMessageToAll('[%s] %s' %(username, msg))
+         self.sendMessageToAll('%s' %totp.now())
          return
 
       if msg.strip() == '/quit': # 보낸 메세지가 'quit'이면
@@ -64,11 +62,14 @@ class MyTcpHandler(socketserver.BaseRequestHandler):
    userman = UserManager()
     
    def handle(self): # 클라이언트가 접속시 클라이언트 주소 출력
-      print('[%s] Connected' %self.client_address[0])
 
       try:
          username = self.registerUsername()
          msg = self.request.recv(1024)
+         print('%s[%s] Connected' %(username, self.client_address[0]))
+         now = datetime.now(KST)
+         nowTime = now.strftime('%H:%M:%S')  
+         print("totp.now : %s, now time : %s"  %(totp.now(), nowTime))
          while msg:
             print(msg.decode())
             if self.userman.messageHandler(username, msg.decode()) == -1:
@@ -79,7 +80,6 @@ class MyTcpHandler(socketserver.BaseRequestHandler):
       except Exception as e:
          print(e)
 
-      print('[%s] has quit.' %self.client_address[0])
       self.userman.removeUser(username)
 
    def registerUsername(self):
@@ -94,8 +94,10 @@ class ChatingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
         
 def runServer():
-   print('+++ Running Server.')
-   print("now totp.at: " + str(totp.at(datetime.datetime.now())) + ", totp.now : " + totp.now())
+   now = datetime.now(KST)
+   nowTime = now.strftime('%H:%M:%S')  
+   print('+++ Running Server. now time : '+nowTime)
+   print("totp.now : " + totp.now())
 
    try:
       server = ChatingServer((HOST, PORT), MyTcpHandler)
