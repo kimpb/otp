@@ -8,7 +8,7 @@ HOST = 'ec2-13-209-98-41.ap-northeast-2.compute.amazonaws.com'
 PORT = 4000
 lock = threading.Lock() # syncronized 동기화 진행하는 스레드 생성
 otp_key = 'GAYDAMBQGAYDAMBQGAYDAMBQGA======'
-totp = pyotp.TOTP(otp_key)
+totp = pyotp.TOTP(otp_key, interval = 60)
 KST = pytz.timezone('Asia/Seoul')
 time_record = datetime.now(KST)
 
@@ -84,7 +84,6 @@ class MyTcpHandler(socketserver.BaseRequestHandler):
 
    def registerUsername(self):
       while True:
-         self.request.send('Login ID:'.encode())
          username = self.request.recv(1024)
          username = username.decode().strip()
          if self.userman.addUser(username, self.request, self.client_address):
