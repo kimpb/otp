@@ -1,16 +1,33 @@
+from encodings import utf_8
 import socketserver
 import threading
 import pyotp
 from datetime import date, datetime, timezone, timedelta
 import pytz
+import base64
+import time
+from Crypto import Random
+from Crypto.Cipher import AES
+import cryption
+
+time.clock = time.time
+
+BS = AES.block_size
+pad = lambda s: s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
+unpad = lambda s : s[0:-ord(s[-1])]
+
+
+
 
 HOST = 'ec2-13-209-98-41.ap-northeast-2.compute.amazonaws.com'
 PORT = 4000
 lock = threading.Lock() # syncronized 동기화 진행하는 스레드 생성
-otp_key = 'GAYDAMBQGAYDAMBQGAYDAMBQGA======'
+otp_key = 'QWERQWERQWERQWERQWERQWERQWERQWER'
+key = otp_key.encode('utf-8')
 totp = pyotp.TOTP(otp_key, interval = 60)
 KST = pytz.timezone('Asia/Seoul')
 time_record = datetime.now(KST)
+
 
 class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는 클래스
 				   # ① 채팅 서버로 입장한 사용자의 등록
@@ -30,7 +47,10 @@ class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는
       lock.acquire() # 스레드 동기화를 막기위한 락
       self.users[username] = (conn, addr)
       lock.release() # 업데이트 후 락 해제
-      self.sendMessageToAll('%s' %totp.now())
+      beforeCipher = pad(totp.now())
+      cipher = AES.new(otp_key, AES.MODE_CBC, IV=iv)
+      afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
+      self.sendMessageToAll('%s' %afterCipher.decode('utf-8'))
       return username
 
    def removeUser(self, username): #사용자를 제거하는 함수
@@ -45,7 +65,10 @@ class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는
 
    def messageHandler(self, username, msg): # 전송한 msg를 처리하는 부분
       if msg[0] != '/': # 보낸 메세지의 첫문자가 '/'가 아니면
-         self.sendMessageToAll('%s' %totp.now())
+         beforeCipher = pad(totp.now())
+         cipher = AES.new(otp_key, AES.MODE_CBC, IV=iv)
+         afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
+         self.sendMessageToAll('%s' %afterCipher.decode('utf-8'))
          return
 
       if msg.strip() == '/quit': # 보낸 메세지가 'quit'이면
@@ -93,11 +116,16 @@ class ChatingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
         
 def runServer():
+   global iv 
+   iv = '0123456789012345' # 16bit
    now = datetime.now(KST)
    nowTime = now.strftime('%H:%M:%S')  
    print('+++ Running Server. now time : '+nowTime)
    print("totp.now : " + totp.now())
-
+   beforeCipher = pad(totp.now())
+   cipher = AES.new(otp_key, AES.MODE_CBC, IV=iv)
+   afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
+   print(afterCipher.decode('utf-8'))
    try:
       server = ChatingServer((HOST, PORT), MyTcpHandler)
       server.serve_forever()
