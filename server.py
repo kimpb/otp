@@ -8,7 +8,6 @@ import base64
 import time
 from Crypto import Random
 from Crypto.Cipher import AES
-import cryption
 
 time.clock = time.time
 
