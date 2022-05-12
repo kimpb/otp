@@ -6,15 +6,19 @@ from datetime import date, datetime, timezone, timedelta
 import pytz
 import base64
 import time
+import pymysql
 from Crypto import Random
 from Crypto.Cipher import AES
-import cryption
 
 time.clock = time.time
 
 BS = AES.block_size
 pad = lambda s: s + (BS - len(s) % BS) * chr(BS - len(s) % BS)
 unpad = lambda s : s[0:-ord(s[-1])]
+
+
+sqlconn = pymysql.connect(host='localhost', user='root', password='123123', db='smartlock', charset='utf8')
+cur = sqlconn.cursor()
 
 
 
@@ -27,6 +31,7 @@ key = otp_key.encode('utf-8')
 totp = pyotp.TOTP(otp_key, interval = 60)
 KST = pytz.timezone('Asia/Seoul')
 time_record = datetime.now(KST)
+
 
 
 class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는 클래스
@@ -48,9 +53,24 @@ class UserManager: # 사용자관리 및 채팅 메세지 전송을 담당하는
       self.users[username] = (conn, addr)
       lock.release() # 업데이트 후 락 해제
       beforeCipher = pad(totp.now())
-      cipher = AES.new(otp_key, AES.MODE_CBC, IV=iv)
-      afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
-      self.sendMessageToAll('%s' %afterCipher.decode('utf-8'))
+      if username.encode('utf-8') == b'\x00\x05Guest':
+            sqlconn = pymysql.connect(host='localhost', user='root', password='123123', db='smartlock', charset='utf8')
+            cur = sqlconn.cursor()
+            sql = 'SELECT * FROM guestkey'
+            cur.execute(sql)
+            result = cur.fetchone()
+            print("Guest key : " + result[0])
+            cipher = AES.new(result[0], AES.MODE_CBC, IV=iv)
+            afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
+            self.sendMessageToAll('%s' %afterCipher.decode('utf-8'))
+            print(afterCipher.decode('utf-8'))
+      else:
+            print("Host key : " + otp_key)
+            cipher = AES.new(otp_key, AES.MODE_CBC, IV=iv)
+            afterCipher = base64.b64encode(cipher.encrypt(beforeCipher))
+            self.sendMessageToAll('%s' %afterCipher.decode('utf-8'))
+            print(afterCipher.decode('utf-8'))
+        
       return username
 
    def removeUser(self, username): #사용자를 제거하는 함수
